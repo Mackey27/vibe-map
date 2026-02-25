@@ -1,0 +1,9 @@
+<?php
+return [
+    // For InfinityFree, use values from your MySQL Databases panel.
+    'VIBEMAP_DB_HOST' => 'sqlXXX.infinityfree.com',
+    'VIBEMAP_DB_PORT' => '3306',
+    'VIBEMAP_DB_NAME' => 'if0_12345678_vibemap',
+    'VIBEMAP_DB_USER' => 'if0_12345678',
+    'VIBEMAP_DB_PASSWORD' => 'your_database_password',
+];
