@@ -45,6 +45,7 @@ if ($authenticatedUser !== ''):
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Redirecting...</title>
+    link rel="icon" type="logo" href="logo.png">
 </head>
 <body>
   <script>
