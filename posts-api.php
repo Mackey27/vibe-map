@@ -58,6 +58,7 @@ function purge_orphan_post_views(mysqli $conn): bool
 $createTableSql = "
 CREATE TABLE IF NOT EXISTS map_posts (
     username VARCHAR(100) NOT NULL PRIMARY KEY,
+    full_name VARCHAR(150) NOT NULL DEFAULT '',
     post_id VARCHAR(64) NOT NULL,
     lat DOUBLE NOT NULL,
     lng DOUBLE NOT NULL,
@@ -73,6 +74,18 @@ CREATE TABLE IF NOT EXISTS map_posts (
 if (!mysqli_query($conn, $createTableSql)) {
     send_json(['ok' => false, 'error' => 'storage_unavailable'], 500);
 }
+
+$checkFullNameColumnResult = mysqli_query($conn, "SHOW COLUMNS FROM map_posts LIKE 'full_name'");
+if ($checkFullNameColumnResult === false) {
+    send_json(['ok' => false, 'error' => 'storage_unavailable'], 500);
+}
+if (mysqli_num_rows($checkFullNameColumnResult) === 0) {
+    if (!mysqli_query($conn, "ALTER TABLE map_posts ADD COLUMN full_name VARCHAR(150) NOT NULL DEFAULT '' AFTER username")) {
+        mysqli_free_result($checkFullNameColumnResult);
+        send_json(['ok' => false, 'error' => 'storage_unavailable'], 500);
+    }
+}
+mysqli_free_result($checkFullNameColumnResult);
 
 $createViewsTableSql = "
 CREATE TABLE IF NOT EXISTS map_post_views (
@@ -115,7 +128,7 @@ if ($method === 'GET') {
     $cutoffSql = (string) max(0, $postExpiryCutoffMs);
     $result = mysqli_query(
         $conn,
-        "SELECT username, post_id, lat, lng, note, photo, music_json, view_count, post_timestamp
+        "SELECT username, full_name, post_id, lat, lng, note, photo, music_json, view_count, post_timestamp
          FROM map_posts
          WHERE post_timestamp >= {$cutoffSql}
          ORDER BY post_timestamp DESC"
@@ -138,6 +151,7 @@ if ($method === 'GET') {
         $posts[] = [
             'id' => (string) ($row['post_id'] ?? ''),
             'username' => (string) ($row['username'] ?? ''),
+            'fullName' => (string) ($row['full_name'] ?? ''),
             'lat' => (float) ($row['lat'] ?? 0),
             'lng' => (float) ($row['lng'] ?? 0),
             'note' => (string) ($row['note'] ?? ''),
@@ -172,6 +186,16 @@ if ($method === 'POST') {
     }
 
     $note = isset($payload['note']) && is_string($payload['note']) ? $payload['note'] : '';
+    $fullName = isset($payload['fullName']) && is_string($payload['fullName'])
+        ? trim($payload['fullName'])
+        : '';
+    if ($fullName === '') {
+        $fullName = $username;
+    }
+    $fullNameLength = function_exists('mb_strlen') ? mb_strlen($fullName) : strlen($fullName);
+    if ($fullNameLength > 150) {
+        $fullName = function_exists('mb_substr') ? mb_substr($fullName, 0, 150) : substr($fullName, 0, 150);
+    }
     $photo = isset($payload['photo']) && is_string($payload['photo']) && $payload['photo'] !== ''
         ? $payload['photo']
         : null;
@@ -233,8 +257,8 @@ if ($method === 'POST') {
 
     $insertStmt = mysqli_prepare(
         $conn,
-        "INSERT INTO map_posts (username, post_id, lat, lng, note, photo, music_json, post_timestamp)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO map_posts (username, full_name, post_id, lat, lng, note, photo, music_json, post_timestamp)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
     if (!$insertStmt) {
         mysqli_rollback($conn);
@@ -242,8 +266,9 @@ if ($method === 'POST') {
     }
     mysqli_stmt_bind_param(
         $insertStmt,
-        'ssddssss',
+        'sssddssss',
         $username,
+        $fullName,
         $postId,
         $lat,
         $lng,

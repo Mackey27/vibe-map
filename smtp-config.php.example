@@ -1,0 +1,12 @@
+<?php
+return [
+  'VIBEMAP_SMTP_HOST' => 'smtp.gmail.com',
+  'VIBEMAP_SMTP_PORT' => '587',
+  'VIBEMAP_SMTP_ENCRYPTION' => 'tls',
+  // For Gmail, this should usually be the full Gmail address.
+  'VIBEMAP_SMTP_USERNAME' => 'yourgmail@gmail.com',
+  // Use a Gmail App Password (16 chars), not your normal Gmail password.
+  'VIBEMAP_SMTP_PASSWORD' => 'your_gmail_app_password',
+  'VIBEMAP_SMTP_FROM_EMAIL' => 'yourgmail@gmail.com',
+  'VIBEMAP_SMTP_FROM_NAME' => 'VibeMap',
+];

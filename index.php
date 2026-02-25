@@ -719,11 +719,12 @@
         <div id="sidebar-avatar" class="w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br from-[var(--mint)] to-[var(--lavender)] flex items-center justify-center text-white font-semibold">
           U
         </div>
-        <div class="min-w-0">
-          <p class="text-xs text-[var(--muted)]">Signed in as</p>
-          <p id="sidebar-username" class="text-sm font-semibold truncate">User</p>
+          <div class="min-w-0">
+            <p class="text-xs text-[var(--muted)]">Signed in as</p>
+            <p id="sidebar-full-name" class="text-sm font-semibold truncate">User</p>
+            <p id="sidebar-username" class="text-xs text-[var(--muted)] truncate"></p>
+          </div>
         </div>
-      </div>
       <div class="px-5 pb-5 mt-auto space-y-2">
         <button id="sidebar-profile-btn" type="button" class="w-full py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg)] text-sm font-semibold hover:border-[var(--mint)] hover:text-[var(--mint)] transition-colors">
           Edit Profile
@@ -958,6 +959,7 @@
     (function () {
       const storage = window.__vibemapStorage || window.localStorage;
       const AUTH_STORAGE_KEY = 'vibemap_auth_user';
+      const AUTH_NAME_STORAGE_KEY = 'vibemap_auth_name';
       const PROFILE_CACHE_KEY = 'vibemap_profiles';
 
       const currentUser = (storage.getItem(AUTH_STORAGE_KEY) || '').trim();
@@ -965,6 +967,29 @@
         window.location.replace('login.php');
         return;
       }
+      const storedAuthName = (storage.getItem(AUTH_NAME_STORAGE_KEY) || '').trim();
+
+      function deriveDisplayNameFromEmail(email) {
+        const value = (email || '').trim();
+        if (!value.includes('@')) {
+          return value || 'User';
+        }
+
+        const localPart = value.split('@')[0].replace(/[._-]+/g, ' ').trim();
+        if (!localPart) {
+          return 'User';
+        }
+
+        return localPart
+          .split(/\s+/)
+          .filter(Boolean)
+          .map((chunk) => chunk.charAt(0).toUpperCase() + chunk.slice(1))
+          .join(' ');
+      }
+
+      const currentUserName = storedAuthName && storedAuthName.toLowerCase() !== currentUser.toLowerCase()
+        ? storedAuthName
+        : deriveDisplayNameFromEmail(currentUser);
 
       if (typeof window.L === 'undefined') {
         return;
@@ -1000,6 +1025,7 @@
         sidebarToggleBtn: document.getElementById('sidebar-toggle-btn'),
         sidebarCloseBtn: document.getElementById('sidebar-close-btn'),
         sidebarAvatar: document.getElementById('sidebar-avatar'),
+        sidebarFullName: document.getElementById('sidebar-full-name'),
         sidebarUsername: document.getElementById('sidebar-username'),
         sidebarProfileBtn: document.getElementById('sidebar-profile-btn'),
         sidebarLogoutBtn: document.getElementById('sidebar-logout-btn'),
@@ -1191,8 +1217,11 @@
       }
 
       function renderSidebarAccount() {
+        if (dom.sidebarFullName) {
+          dom.sidebarFullName.textContent = currentUserName || 'User';
+        }
         if (dom.sidebarUsername) {
-          dom.sidebarUsername.textContent = currentUser || 'User';
+          dom.sidebarUsername.textContent = currentUser || '';
         }
         setElementAvatar(dom.sidebarAvatar, currentUser);
       }
@@ -1200,6 +1229,7 @@
       function logoutUser() {
         try {
           storage.removeItem(AUTH_STORAGE_KEY);
+          storage.removeItem(AUTH_NAME_STORAGE_KEY);
         } catch (_) {}
         window.location.replace('login.php');
       }
@@ -1263,19 +1293,23 @@
       }
 
       function buildPostIcon(post) {
-        const avatar = getAvatarForUser(post.username);
+        const ownerKey = typeof post.username === 'string' ? post.username : '';
+        const displayName = typeof post.fullName === 'string' && post.fullName.trim()
+          ? post.fullName.trim()
+          : (ownerKey || 'User');
+        const avatar = getAvatarForUser(ownerKey);
         if (avatar) {
           return `
             <div class="vibe-marker">
               <div class="marker-avatar-wrap">
-                <img src="${escapeAttr(avatar)}" alt="${escapeAttr(post.username || 'User')}" class="marker-avatar">
+                <img src="${escapeAttr(avatar)}" alt="${escapeAttr(displayName)}" class="marker-avatar">
               </div>
-              <div class="marker-pulse marker-pulse-circle" style="background:${markerColorForUser(post.username)};"></div>
+              <div class="marker-pulse marker-pulse-circle" style="background:${markerColorForUser(ownerKey || displayName)};"></div>
             </div>
           `;
         }
 
-        const color = markerColorForUser(post.username);
+        const color = markerColorForUser(ownerKey || displayName);
         return `
           <div class="vibe-marker">
             <div class="marker-outer" style="background:${color};">
@@ -1297,13 +1331,16 @@
       }
 
       function buildPostPopup(post) {
-        const username = post.username || 'User';
+        const ownerKey = typeof post.username === 'string' && post.username ? post.username : '';
+        const displayName = typeof post.fullName === 'string' && post.fullName.trim()
+          ? post.fullName.trim()
+          : (ownerKey || 'User');
         const timestamp = formatTimestamp(post.timestamp);
         const note = typeof post.note === 'string' ? post.note.trim() : '';
         const normalizedNote = note.replace(/\n{3,}/g, '\n\n');
         const photo = typeof post.photo === 'string' && post.photo ? post.photo : null;
         const music = post.music && typeof post.music === 'object' ? post.music : null;
-        const isMine = normalizeUser(username) === normalizeUser(currentUser);
+        const isMine = normalizeUser(ownerKey) === normalizeUser(currentUser);
         const postId = String(post.id || '');
         const views = Math.max(0, Math.floor(Number(post.views) || 0));
 
@@ -1316,12 +1353,12 @@
         return `
           <div class="popup-post-card" data-popup-post-id="${escapeAttr(postId)}">
             <div class="popup-post-header">
-              ${getAvatarForUser(username)
-                ? `<div class="popup-post-avatar"><img src="${escapeAttr(getAvatarForUser(username))}" alt="Profile picture" class="w-full h-full object-cover"></div>`
-                : `<div class="popup-post-avatar popup-post-avatar-fallback">${escapeHtml(getUserInitial(username))}</div>`
+              ${getAvatarForUser(ownerKey)
+                ? `<div class="popup-post-avatar"><img src="${escapeAttr(getAvatarForUser(ownerKey))}" alt="Profile picture" class="w-full h-full object-cover"></div>`
+                : `<div class="popup-post-avatar popup-post-avatar-fallback">${escapeHtml(getUserInitial(displayName))}</div>`
               }
               <div class="popup-post-meta">
-                <p class="popup-post-username truncate">${escapeHtml(username)}</p>
+                <p class="popup-post-username truncate">${escapeHtml(displayName)}</p>
                 <p class="popup-post-time">${escapeHtml(timestamp || 'Just now')}</p>
               </div>
             </div>
@@ -2012,6 +2049,7 @@
         const coords = currentPostCoords();
         const payload = {
           username: currentUser,
+          fullName: currentUserName || currentUser,
           id: `post-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           lat: Number(coords.lat.toFixed(6)),
           lng: Number(coords.lng.toFixed(6)),
